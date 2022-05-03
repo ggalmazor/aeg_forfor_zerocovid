@@ -1,8 +1,8 @@
-import {Server as socket_io_server} from "socket.io";
+import * as io from "socket.io";
+import Client from "./client.mjs";
 
-
-export class Clients {
-  #websockets_server;
+export default class Clients {
+  websockets_server;
 
   constructor(http_server, clients = []) {
     this.http_server = http_server;
@@ -10,38 +10,51 @@ export class Clients {
   }
 
   start() {
-    this.#websockets_server = new socket_io_server(this.http_server, {
+    this.websockets_server = new io.Server(this.http_server, {
       pingTimeout: 30000,
       cors: {origin: '*',}
     });
 
-    this.#websockets_server.on("connection", (socket) => {
+    this.websockets_server.on("connection", (socket) => {
+      console.log(`Received: 'connection'`)
       const client = new Client(socket);
-      this.#add(client);
+      this.add(client);
 
-      socket.on('subscribe', data => client.subcribe_to(data.location, data.field));
-      socket.on('start', () => client.ready());
-      socket.on('stop', () => client.standby());
-      socket.on('disconnect', () => this.#remove(client));
+      socket.on('subscribe', data => {
+        console.log(`Received: 'subscribe' with ${data}`)
+        client.subcribe_to(data.location, data.field)
+      });
+      socket.on('start', () => {
+        console.log(`Received: 'start'`)
+        client.ready()
+      });
+      socket.on('stop', () => {
+        console.log(`Received: 'stop'`)
+        client.standby()
+      });
+      socket.on('disconnect', () => {
+        console.log(`Received: 'disconnect'`)
+        this.remove(client)
+      });
 
       socket.emit('connected');
     });
   }
 
-  #remove(client_to_remove) {
+  remove(client_to_remove) {
     this.clients = this.clients.filter(client => client.equals(client_to_remove));
   }
 
-  #add(client) {
+  add(client) {
     this.clients.push(client);
   }
 
   subscribed_to(location, field) {
-    return new Clients(this.clients.filter(client => client.is_subscribed_to(location, field)));
+    return new Clients(this.http_server, this.clients.filter(client => client.is_subscribed_to(location, field)));
   }
 
   ready() {
-    return new Clients(this.clients.filter(client => client.is_ready()));
+    return new Clients(this.http_server, this.clients.filter(client => client.is_ready()));
   }
 
   send(data) {
@@ -49,55 +62,3 @@ export class Clients {
   }
 }
 
-class Client {
-  #socket;
-  #subscriptions;
-  #status;
-
-  constructor(socket, subscriptions = [], status = 'standby') {
-    this.#socket = socket;
-    this.#subscriptions = subscriptions;
-    this.#status = status;
-  }
-
-  subcribe_to(location, field) {
-    this.#subscriptions.push({
-      location: location,
-      field: field
-    });
-  }
-
-  is_subscribed_to(location, field) {
-    return this.#subscriptions.some(subscription => {
-      return subscription.location === location &&
-        subscription.field === field;
-    });
-  }
-
-  is_ready() {
-    return this.#status === 'ready';
-  }
-
-  ready() {
-    this.#status = 'ready';
-  }
-
-  standby() {
-    this.#status = 'standby';
-  }
-
-  send(data) {
-    this.#socket.emit('data', data);
-  }
-
-  id() {
-    return this.#socket.id;
-  }
-
-  equals(other) {
-    if (!(other instanceof Client))
-      return false;
-
-    return this.id() === other.id();
-  }
-}

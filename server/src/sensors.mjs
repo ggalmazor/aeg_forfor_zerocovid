@@ -1,4 +1,4 @@
-export class Sensors {
+export default class Sensors {
   constructor() {
   }
 
