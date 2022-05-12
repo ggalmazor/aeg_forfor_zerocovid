@@ -4,9 +4,10 @@ import Client from "./client.mjs";
 export default class Clients {
   websockets_server;
 
-  constructor(http_server, clients = []) {
+  constructor(http_server, clients = [], on_subscription_callbacks =[]) {
     this.http_server = http_server;
     this.clients = clients;
+    this.on_subscription_callbacks = on_subscription_callbacks;
   }
 
   start() {
@@ -21,8 +22,9 @@ export default class Clients {
       this.add(client);
 
       socket.on('subscribe', data => {
-        console.log(`Received: 'subscribe' with ${data}`)
-        client.subcribe_to(data.location, data.field)
+        console.log(`Received: 'subscribe' to [${data.location}:${data.field}]`)
+        client.subcribe_to(data.location, data.field);
+        this.on_subscription_callbacks.forEach(callback => callback(data));
       });
       socket.on('start', () => {
         console.log(`Received: 'start'`)
@@ -59,6 +61,10 @@ export default class Clients {
 
   send(data) {
     this.clients.forEach(client => client.send(data));
+  }
+
+  on_subscription(callback) {
+    this.on_subscription_callbacks.push(callback);
   }
 }
 
